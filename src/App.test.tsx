@@ -2,27 +2,45 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
+function renderApp(initialRoute = '/') {
+  window.history.pushState({}, '', initialRoute);
+  return render(<App />);
+}
+
 describe('App', () => {
-  it('renders the welcome heading', () => {
-    render(<App />);
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+  it('renders sidebar brand', () => {
+    renderApp();
+    expect(screen.getByText('零电商管理')).toBeInTheDocument();
   });
 
-  it('renders the Vite + React logos', () => {
-    render(<App />);
-    const logos = screen.getAllByRole('img');
-    expect(logos.length).toBeGreaterThanOrEqual(2);
+  it('renders sidebar navigation items', () => {
+    renderApp();
+    expect(screen.getByText('📊 仪表盘')).toBeInTheDocument();
+    expect(screen.getByText('📦 商品管理')).toBeInTheDocument();
+    expect(screen.getByText('📋 订单管理')).toBeInTheDocument();
+    expect(screen.getByText('🏗️ 库存管理')).toBeInTheDocument();
+    expect(screen.getByText('👥 客户管理')).toBeInTheDocument();
+    expect(screen.getByText('📈 销售报表')).toBeInTheDocument();
   });
 
-  it('has a counter button that increments', async () => {
-    const { userEvent } = await import('@testing-library/user-event');
-    render(<App />);
-    const user = userEvent.setup();
+  it('redirects / to /dashboard', () => {
+    renderApp('/');
+    expect(screen.getByText('仪表盘')).toBeInTheDocument();
+  });
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveTextContent(/count is 0/i);
+  it('renders dashboard page at /dashboard', () => {
+    renderApp('/dashboard');
+    expect(screen.getByText('仪表盘')).toBeInTheDocument();
+    expect(screen.getByText('今日销售额')).toBeInTheDocument();
+  });
 
-    await user.click(button);
-    expect(button).toHaveTextContent(/count is 1/i);
+  it('renders products page at /products', () => {
+    renderApp('/products');
+    expect(screen.getByText('商品管理')).toBeInTheDocument();
+  });
+
+  it('renders orders page at /orders', () => {
+    renderApp('/orders');
+    expect(screen.getByText('订单管理')).toBeInTheDocument();
   });
 });

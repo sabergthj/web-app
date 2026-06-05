@@ -1,13 +1,23 @@
 # CLAUDE.md — 小光项目上下文
 
-## 项目概览
+## 项目: 零电商管理 (Zero E-Commerce Manager)
 
-React + Vite + TypeScript 前端单页应用，部署到 VPS (Nginx)。
+React + Vite + TypeScript 全自动化电商管理系统，部署到 VPS (Nginx)。
+
+## 功能模块
+
+- 📊 仪表盘 — 销售概览、关键指标
+- 📦 商品管理 — 商品 CRUD、分类、定价
+- 📋 订单管理 — 订单列表、状态流转、退款、物流
+- 🏗️ 库存管理 — 库存查询、出入库、预警
+- 👥 客户管理 — 客户列表、分组、消费记录
+- 📈 销售报表 — 营收趋势、商品排行、导出
 
 ## 架构
 
-- **前端框架**: React 19 + TypeScript 6
+- **前端框架**: React 19 + TypeScript 6 + React Router v7
 - **构建工具**: Vite 8
+- **样式**: CSS Modules
 - **测试**: Vitest (单元/组件) + Playwright (E2E, 4 浏览器)
 - **Lint**: ESLint + Prettier + eslint-plugin-security
 - **CI/CD**: GitHub Actions (lint → test → security → build → deploy)

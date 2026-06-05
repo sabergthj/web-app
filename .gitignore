@@ -24,4 +24,4 @@ test-results/
 *.njsproj
 *.sln
 *.sw?
-.github/workflows/ci.yml
+.github/workflows/

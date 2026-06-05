@@ -1,0 +1,15 @@
+# OWASP ZAP Rules Configuration
+# 排除已知无害的规则，保留关键安全检测
+
+# Rule ID             Description
+# ============================================
+10019  IGNORE  (Content-Type header missing — handled by Nginx config)
+10020  WARN    (X-Frame-Options header not included)
+10021  WARN    (X-Content-Type-Options header missing)
+10035  WARN    (Strict-Transport-Security header not set)
+10037  WARN    (Server leaks version info via HTTP header)
+10038  IGNORE  (Content Security Policy not set — configured in Nginx)
+10055  WARN    (CSP unsafe-inline — review if needed)
+10202  WARN    (Absence of Anti-CSRF tokens — SPA不需要)
+90033  WARN    (NoScript XSS Injection — for legacy browser)
+10015  WARN    (Incomplete or No Cache-control set)

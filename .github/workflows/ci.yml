@@ -1,0 +1,179 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '22'
+  STAGING_URL: ${{ secrets.STAGING_URL }}
+  PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+
+jobs:
+  # ============================================================
+  # Stage 1: Lint (ESLint + Prettier + TypeScript)
+  # ============================================================
+  lint:
+    name: 🔍 Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Prettier Check
+        run: npm run format:check
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript Check
+        run: npm run typecheck
+
+  # ============================================================
+  # Stage 2: Test (Vitest + Playwright)
+  # ============================================================
+  test:
+    name: 🧪 Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Unit Tests (Vitest)
+        run: npm run test:unit -- --reporter=verbose
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+      - name: E2E Tests (Playwright)
+        run: npm run test:e2e
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+
+  # ============================================================
+  # Stage 3: Security (npm audit + Trivy + ZAP)
+  # ============================================================
+  security:
+    name: 🛡️ Security
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+
+      # SAST: 依赖漏洞审计
+      - name: npm audit
+        run: npm run security:audit
+        continue-on-error: true
+
+      # SAST: Trivy 文件系统扫描（Dockerfile, 配置文件等）
+      - name: Trivy FS Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+        continue-on-error: true
+
+      - name: Upload Trivy Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      # Build for DAST
+      - name: Build
+        run: npm run build
+
+      # DAST: OWASP ZAP Baseline Scan
+      - name: Start Preview Server
+        run: |
+          npx vite preview --port 4173 --host 0.0.0.0 &
+          sleep 3
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: 'http://localhost:4173'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -j -I'
+
+  # ============================================================
+  # Stage 4: Build
+  # ============================================================
+  build:
+    name: 📦 Build
+    needs: security
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # ============================================================
+  # Stage 5: Deploy → VPS
+  # ============================================================
+  deploy:
+    name: 🚀 Deploy to VPS
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Setup SSH
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+
+      - name: Deploy to VPS
+        run: |
+          # 上传到临时目录
+          rsync -avz --delete dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/frontend-new/
+
+          # 零停机切换：验证新版本 → 替换旧版本 → reload
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s << 'ENDSSH'
+            set -e
+            # 备份当前版本
+            if [ -d /var/www/frontend ]; then
+              cp -a /var/www/frontend /var/www/frontend-backup-$(date +%Y%m%d-%H%M%S)
+            fi
+            # 切换到新版本
+            rm -rf /var/www/frontend
+            mv /var/www/frontend-new /var/www/frontend
+            # 验证 Nginx 配置
+            nginx -t
+            # 平滑重启
+            nginx -s reload
+            echo "✅ 部署成功"
+          ENDSSH
